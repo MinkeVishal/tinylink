@@ -124,7 +124,7 @@ export default function Dashboard() {
           <button className="btn" type="submit" disabled={submitting || !url}>{submitting ? 'Adding…' : 'Add'}</button>
         </form>
         <div className="controls-meta">
-          <div className="note">Codes: <span className="muted">[A-Za-z0-9]{6,8}</span></div>
+          <div className="note">Codes: <span className="muted">{"[A-Za-z0-9]{6,8}"}</span></div>
           <div>
             <select className="select" value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}>
               <option value="new">Sort: New</option>

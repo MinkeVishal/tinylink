@@ -1,27 +1,7 @@
-useEffect(() => {
-  let cancelled = false;
+"use client"
+import { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
 
-<<<<<<< HEAD
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/links/${code}`);
-      if (res.status === 404) {
-        setError("Not found");
-        setLink(null);
-      } else if (!res.ok) {
-        const b = await res.json().catch(() => ({}));
-        throw new Error(b.error || "Failed");
-      } else {
-        const data = await res.json();
-        if (!cancelled) setLink(data);
-      }
-    } catch (e: any) {
-      if (!cancelled) setError(e.message || "Error");
-    } finally {
-      if (!cancelled) setLoading(false);
-=======
 type Link = {
   id: number;
   code: string;
@@ -64,7 +44,7 @@ export default function CodeStats() {
       }
     }
     load();
-    return () => (cancelled = true);
+    return () => { cancelled = true; };
   }, [code]);
 
   async function handleDelete() {
@@ -77,13 +57,34 @@ export default function CodeStats() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       alert(msg || "Error deleting");
->>>>>>> ae99372 (fixed issue)
     }
   }
 
-  load();
+  if (loading) return <div style={{ padding: 20 }}>Loading…</div>;
+  if (error) return <div style={{ padding: 20, color: "red" }}>{error}</div>;
+  if (!link) return <div style={{ padding: 20 }}>Not found</div>;
 
-  return () => {
-    cancelled = true;  // ✔ cleanup without returning value
-  };
-}, [code]);
+  return (
+    <div style={{ padding: 20 }}>
+      <h1>Stats for {link.code}</h1>
+      <p>
+        <strong>Target:</strong> <a href={link.url}>{link.url}</a>
+      </p>
+      <p>
+        <strong>Clicks:</strong> {link.clicks}
+      </p>
+      <p>
+        <strong>Last clicked:</strong> {link.lastClicked ? new Date(link.lastClicked).toLocaleString() : "—"}
+      </p>
+      <p>
+        <strong>Created:</strong> {new Date(link.createdAt).toLocaleString()}
+      </p>
+      <div style={{ marginTop: 12 }}>
+        <button onClick={() => navigator.clipboard?.writeText(`${location.origin}/${link.code}`) || alert(`${location.origin}/${link.code}`)} style={{ marginRight: 8 }}>
+          Copy Short URL
+        </button>
+        <button onClick={handleDelete}>Delete</button>
+      </div>
+    </div>
+  );
+}
