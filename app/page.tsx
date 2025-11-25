@@ -1,65 +1,191 @@
-import Image from "next/image";
+"use client"
+import { useEffect, useState } from "react";
 
-export default function Home() {
+type Link = {
+  id: number;
+  code: string;
+  url: string;
+  clicks: number;
+  lastClicked: string | null;
+  createdAt: string;
+};
+
+export default function Dashboard() {
+  const [links, setLinks] = useState<Link[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [url, setUrl] = useState("");
+  const [customCode, setCustomCode] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [query, setQuery] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/links");
+      if (!res.ok) throw new Error("Failed to load");
+      const data = await res.json();
+      setLinks(data);
+    } catch (e: any) {
+      setError(e.message || "Error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  // Validate form inputs and create a new short link
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    // Basic client-side validation
+    try {
+      new URL(url);
+    } catch {
+      setError("Please enter a valid URL (include https://)");
+      return;
+    }
+    const CODE_RE = /^[A-Za-z0-9]{6,8}$/;
+    if (customCode && !CODE_RE.test(customCode)) {
+      setError("Custom code must match [A-Za-z0-9]{6,8}");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload: { url: string; customCode?: string } = { url };
+      if (customCode) payload.customCode = customCode;
+      const res = await fetch("/api/links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.status === 409) {
+        const body = await res.json();
+        setError(body.error || "Code already exists");
+        return;
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error || "Failed to create link");
+        return;
+      }
+      const created = await res.json();
+      setUrl("");
+      setCustomCode("");
+      setLinks((s) => [created, ...s]);
+      // show success briefly
+      setToast("Link created");
+      setTimeout(() => setToast(null), 2500);
+    } catch (err) {
+      setError((err as Error).message || "Error");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete(code: string) {
+    if (!confirm(`Delete link ${code}?`)) return;
+    try {
+      const res = await fetch(`/api/links/${code}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      setLinks((s) => s.filter((l) => l.code !== code));
+      setToast("Link deleted");
+      setTimeout(() => setToast(null), 2000);
+    } catch (e: any) {
+      alert(e.message || "Error deleting");
+    }
+  }
+
+  // Sort state: 'new' | 'clicks'
+  const [sortBy, setSortBy] = useState<'new' | 'clicks'>('new');
+  const [toast, setToast] = useState<string | null>(null);
+
+  const filtered = links
+    .filter((l) => l.code.toLowerCase().includes(query.toLowerCase()) || l.url.toLowerCase().includes(query.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'clicks') return b.clicks - a.clicks;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div>
+      <h1>Tinylink — Dashboard</h1>
+
+      <div className="controls">
+        <form onSubmit={handleAdd} className="form">
+          <input className="flex" placeholder="https://example.com" value={url} onChange={(e) => setUrl(e.target.value)} required />
+          <input placeholder="custom code (optional)" value={customCode} onChange={(e) => setCustomCode(e.target.value)} style={{ width: 180 }} />
+          <button className="btn" type="submit" disabled={submitting || !url}>{submitting ? 'Adding…' : 'Add'}</button>
+        </form>
+        <div className="controls-meta">
+          <div className="note">Codes: <span className="muted">[A-Za-z0-9]{6,8}</span></div>
+          <div>
+            <select className="select" value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}>
+              <option value="new">Sort: New</option>
+              <option value="clicks">Sort: Clicks</option>
+            </select>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </div>
+
+      <div className="search-container">
+        <input className="search-input" placeholder="Search by code or URL" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div className="search-action">
+          <button className="btn" onClick={() => setQuery('')}>Clear</button>
         </div>
-      </main>
+      </div>
+
+      <section>
+        {loading && <div className="empty">Loading…</div>}
+        {error && <div className="error">{error}</div>}
+        {!loading && !error && (
+          <>
+            {filtered.length === 0 ? (
+              <div className="empty">No links — create one above.</div>
+            ) : (
+              <div className="table-wrapper">
+                <table className="table">
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>URL</th>
+                    <th style={{ textAlign: 'right' }}>Clicks</th>
+                    <th>Last Clicked</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((l) => (
+                    <tr key={l.code}>
+                      <td>
+                        <a className="code-link" href={`/${l.code}`} target="_blank" rel="noreferrer">{l.code}</a>
+                        <span className="link-pill">{(() => { try { return new URL(l.url).hostname } catch { return '' } })()}</span>
+                      </td>
+                      <td title={l.url} className="muted url-cell">{l.url}</td>
+                      <td className="align-right">{l.clicks}</td>
+                      <td>{l.lastClicked ? new Date(l.lastClicked).toLocaleString() : '—'}</td>
+                      <td className="actions">
+                        <button className="btn" aria-label={`Copy ${l.code}`} onClick={() => { navigator.clipboard?.writeText(`${location.origin}/${l.code}`); setToast('Copied'); setTimeout(() => setToast(null), 1200); }}>Copy</button>
+                        <a className="stats-link" href={`/code/${l.code}`}>Stats</a>
+                        <button className="btn" onClick={() => handleDelete(l.code)}>Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      {toast && <div className="toast">{toast}</div>}
     </div>
   );
 }
